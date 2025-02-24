@@ -443,11 +443,11 @@ function createFlightCards(data) {
     container.className = 'space-y-4 opacity-0';
     
     // 出發航班
-    const departureCard = createFlightCard(data.departureFlight, '出發航班', 'card-delay-1');
+    const departureCard = createFlightCard(data.departureFlight, '出發航班');
     container.appendChild(departureCard);
     
     // 回程航班
-    const returnCard = createFlightCard(data.returnFlight, '回程航班', 'card-delay-2');
+    const returnCard = createFlightCard(data.returnFlight, '回程航班');
     container.appendChild(returnCard);
     
     // 添加動畫
@@ -850,7 +850,7 @@ function showLoadingState() {
     }
 }
 
-// 修改 createFlightCard 函數，添加航班代碼到卡片右上角
+// 修改後的航班信息卡片
 function createFlightCard(flightData, title) {
     const section = document.createElement('section');
     section.className = 'bg-white p-6 rounded-lg shadow fade-in relative';
@@ -858,46 +858,36 @@ function createFlightCard(flightData, title) {
     section.innerHTML = `
         <h3 class="text-lg font-semibold text-[#595141] mb-4 pb-2 border-b border-[#B4A582] flex items-center justify-between">
             ${title}
-            <div class="flex items-center gap-2">
-                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-[#B4A582] text-white">
-                    ${flightData.flightNumber}
-                </span>
-            </div>
+            <span class="text-sm font-medium text-[#595141]">
+                ${flightData.flightNumber}
+            </span>
         </h3>
         <div class="space-y-2 text-[#595141]">
             <p class="flex items-center">
-                <span class="text-gray-500 w-14">出發地：</span>
+                <span class="text-gray-500 w-14">機場：</span>
                 <span class="text-[#595141] font-medium">
-                    ${flightData.origin.city} (${flightData.origin.code})
+                    ${flightData.origin.city}（${flightData.origin.code}） → ${flightData.destination.city}（${flightData.destination.code}）
                 </span>
             </p>
             <p class="flex items-center">
-                <span class="text-gray-500 w-14">目的地：</span>
+                <span class="text-gray-500 w-14">時間：</span>
                 <span class="text-[#595141] font-medium">
-                    ${flightData.destination.city} (${flightData.destination.code})
+                    ${flightData.origin.time} → ${flightData.destination.time}
                 </span>
             </p>
             <p class="flex items-center">
-                <span class="text-gray-500 w-14">出發時間：</span>
+                <span class="text-gray-500 w-14">天氣：</span>
                 <span class="text-[#595141] font-medium">
-                    ${flightData.origin.time}
+                    ${flightData.origin.weather ? `（${flightData.origin.weather} ${flightData.origin.temp}°C）` : 'N/A'} / 
+                    ${flightData.destination.weather ? `（${flightData.destination.weather} ${flightData.destination.temp}°C）` : 'N/A'}
                 </span>
             </p>
             <p class="flex items-center">
-                <span class="text-gray-500 w-14">抵達時間：</span>
-                <span class="text-[#595141] font-medium">
-                    ${flightData.destination.time}
-                </span>
-            </p>
-            <p class="flex items-center">
-                <span class="text-gray-500 w-14">航空公司：</span>
+                <span class="text-gray-500 w-14">航空：</span>
                 <span class="text-[#595141] font-medium">
                     ${flightData.airline}
                 </span>
             </p>
-        </div>
-        <div class="absolute top-0 right-0 mt-2 mr-2 bg-[#B4A582] text-white text-xs font-bold px-2 py-1 rounded">
-            ${flightData.flightNumber}
         </div>
     `;
     
