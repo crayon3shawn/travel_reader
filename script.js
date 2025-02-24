@@ -133,7 +133,7 @@ function extractInfoWithRegex(content) {
     return { airport, flight, time, hotel };
 }
 
-// 修改航班格式解析
+// 改進後的航班解析邏輯
 const flightPatterns = [
     // 表格格式 (2025/03/08 六 亞洲航空 AK171 高雄機場 13:35 吉隆坡機場 18:00)
     {
@@ -161,7 +161,7 @@ const flightPatterns = [
             if (match[1]) { // 出發航班
                 return {
                     date: formatDate(match[1]),
-                    airline: 'China Airlines',
+                    airline: '中華航空',
                     flightNumber: match[2],
                     origin: {
                         city: '高雄',
@@ -177,7 +177,7 @@ const flightPatterns = [
             } else { // 回程航班
                 return {
                     date: formatDate(match[5]),
-                    airline: 'China Airlines',
+                    airline: '中華航空',
                     flightNumber: match[6],
                     origin: {
                         city: '曼谷',
@@ -233,21 +233,20 @@ const airportCodes = {
     '波得申': 'PDI'
 };
 
-// 修改 analyzeFileContent 函數中的錯誤處理
+// 解析文件內容
 async function analyzeFileContent(content) {
     try {
-        console.log('Original content:', content);
+        console.log('原始內容:', content);
         
         let departureFlight = null;
         let returnFlight = null;
-        const hotels = [];
 
         // 嘗試所有航班格式
         for (const format of flightPatterns) {
             let match;
             let matches = [];
             while ((match = format.pattern.exec(content)) !== null) {
-                console.log('Found flight match:', match);
+                console.log('找到航班匹配:', match);
                 matches.push(format.extract(match));
             }
             if (matches.length >= 2) {
@@ -256,34 +255,18 @@ async function analyzeFileContent(content) {
             }
         }
 
-        // 嘗試所有飯店格式
-        for (const format of hotelPatterns) {
-            let match;
-            while ((match = format.pattern.exec(content)) !== null) {
-                console.log('Found hotel match:', match);
-                hotels.push(format.extract(match));
-            }
-            if (hotels.length > 0) break;
-        }
-
-        // 驗證數據
         if (!departureFlight || !returnFlight) {
             console.warn('無法找到完整的航班資訊');
             return null;
         }
 
-        if (hotels.length === 0) {
-            console.warn('無法找到飯店資訊');
-        }
-
         return {
             departureFlight,
-            returnFlight,
-            accommodation: hotels
+            returnFlight
         };
 
     } catch (error) {
-        console.error('Error analyzing content:', error);
+        console.error('解析文件時發生錯誤:', error);
         return null;
     }
 }
@@ -361,14 +344,11 @@ function handleJSON(file) {
     reader.readAsText(file);
 }
 
-// 更新天氣 API 設定
-const WEATHER_API_KEY = 'SE6BL6BQQARHYHU54795YNMKK';
-const WEATHER_API_BASE_URL = 'https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline';
-
+// 修改 cityMap，移除天氣相關資訊
 const cityMap = {
     'Kaohsiung': {
         zh: '高雄',
-        cityEn: 'Kaohsiung,Taiwan',  // 加入國家以提高準確性
+        cityEn: 'Kaohsiung,Taiwan',
         code: 'KHH',
         country: 'Taiwan'
     },
@@ -399,41 +379,20 @@ function getCityInfo(cityName) {
 
 // 確保在 DOM 完全加載後再綁定事件
 document.addEventListener('DOMContentLoaded', function() {
-    const myButton = document.getElementById('myButton');
-    if (myButton) {
-        myButton.addEventListener('click', function() {
-            // 事件處理邏輯
-        });
+    const button = document.getElementById('myButton');
+    if (button) {
+        button.addEventListener('click', handleClick);
     } else {
-        console.warn('Element with ID "myButton" not found.');
+        console.warn('按钮元素未找到');
     }
 });
 
+// 移除 getWeather 函數，改為返回預設值
 async function getWeather(city, date) {
-    try {
-        const cityInfo = getCityInfo(city);
-        const location = cityInfo ? cityInfo.cityEn : city; // 使用英文名稱
-        const formattedDate = date.replace(/\//g, '-'); // 確保日期格式為 YYYY-MM-DD
-        const encodedCity = encodeURIComponent(location); // 確保城市名稱正確編碼
-        const response = await fetch(`https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/${encodedCity}/${formattedDate}?key=${WEATHER_API_KEY}&unitGroup=metric&include=current`);
-        
-        if (!response.ok) {
-            throw new Error(`Weather API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        if (!data.currentConditions) {
-            throw new Error('Weather data is incomplete.');
-        }
-
-        return {
-            condition: data.currentConditions.conditions,
-            temp: data.currentConditions.temp
-        };
-    } catch (error) {
-        console.error('Error fetching weather:', error);
-        throw new Error('無法獲取天氣資訊');
-    }
+    return {
+        condition: null,
+        temp: null
+    };
 }
 
 // 修改 hotelInfo 映射，統一使用日式風格配色
@@ -543,65 +502,42 @@ const dataProcessor = {
     }
 };
 
-// 優化顯示邏輯
+// 修改 displayTravelInfo 函數，簡化天氣相關邏輯
 async function displayTravelInfo(data) {
     try {
         if (!data || !data.departureFlight || !data.returnFlight) {
             throw new Error('無法解析航班資訊');
         }
 
-        // 先移除所有現有內容
         const infoContainer = document.querySelector('.info-container');
         infoContainer.innerHTML = `
             <div>
                 <h2 class="text-xl font-semibold text-[#595141] mb-4">航班資訊</h2>
                 <div id="flightContainer" class="space-y-4"></div>
             </div>
-            <div class="mt-6">
-                <h2 class="text-xl font-semibold text-[#595141] mb-4">住宿資訊</h2>
-                <div id="hotelContainer" class="space-y-4"></div>
-            </div>
         `;
 
         showLoadingState();
         
-        // 獲取容器
         const flightContainer = document.getElementById('flightContainer');
-        const hotelContainer = document.getElementById('hotelContainer');
 
-        // 確保容器存在
-        if (!flightContainer || !hotelContainer) {
+        if (!flightContainer) {
             throw new Error('找不到必要的容器元素');
         }
 
-        // 清空現有內容
         flightContainer.innerHTML = '';
-        hotelContainer.innerHTML = '';
-
-        // 獲取天氣資訊
-        const departureWeather = await getWeather(data.departureFlight.origin.city, data.departureFlight.date);
-        const destinationWeather = await getWeather(data.departureFlight.destination.city, data.departureFlight.date);
-        const returnWeather = await getWeather(data.returnFlight.origin.city, data.returnFlight.date);
-        const returnDestWeather = await getWeather(data.returnFlight.destination.city, data.returnFlight.date);
 
         // 創建並添加航班卡片
-        const departureCard = createFlightCard(data.departureFlight, '出發航班', 'fade-in', departureWeather, destinationWeather);
-        const returnCard = createFlightCard(data.returnFlight, '回程航班', 'fade-in', returnWeather, returnDestWeather);
+        const departureCard = createFlightCard(data.departureFlight, '出發航班');
+        const returnCard = createFlightCard(data.returnFlight, '回程航班');
         
         flightContainer.appendChild(departureCard);
         flightContainer.appendChild(returnCard);
 
-        // 創建並添加住宿卡片
-        data.accommodation.forEach((hotel, index) => {
-            const card = createHotelCard(hotel, index);
-            hotelContainer.appendChild(card);
-        });
-
-        // 移除載入狀態
         hideLoadingState();
 
     } catch (error) {
-        console.error('Error displaying info:', error);
+        console.error('顯示資訊時發生錯誤:', error);
         showErrorState(error);
     }
 }
@@ -828,7 +764,6 @@ function createHotelCard(hotel, index) {
     const section = document.createElement('section');
     section.className = 'bg-white p-6 rounded-lg shadow fade-in';
     
-    // 生成 Google Maps 連結
     const mapUrl = hotelData.address ? 
         `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotelData.address)}` : 
         null;
@@ -842,7 +777,7 @@ function createHotelCard(hotel, index) {
         </h3>
         <div class="space-y-4">
             <div class="flex items-center">
-                <span class="text-gray-500 w-14">名稱：</span>
+                <span class="text-gray-500 w-14">名称：</span>
                 ${hotelData.website ? 
                     `<a href="${hotelData.website}" target="_blank" class="text-[#595141] hover:text-[#8B7355] hover:underline flex items-center">
                         ${hotel.hotel}
@@ -865,7 +800,7 @@ function createHotelCard(hotel, index) {
                 : ''
             }
             <div class="flex items-center">
-                <span class="text-gray-500 w-14">電話：</span>
+                <span class="text-gray-500 w-14">电话：</span>
                 <a href="tel:${formatPhoneNumber(hotel.contact)}" class="text-[#595141] hover:text-[#8B7355]">
                     ${formatPhoneNumber(hotel.contact)}
                 </a>
@@ -915,11 +850,11 @@ function showLoadingState() {
     }
 }
 
-// 修改 createFlightCard 函數
-function createFlightCard(flightData, title, delayClass, originWeather, destWeather) {
+// 修改 createFlightCard 函數，添加航班代碼到卡片右上角
+function createFlightCard(flightData, title) {
     const section = document.createElement('section');
-    section.className = 'bg-white p-6 rounded-lg shadow fade-in';
-    
+    section.className = 'bg-white p-6 rounded-lg shadow fade-in relative';
+
     section.innerHTML = `
         <h3 class="text-lg font-semibold text-[#595141] mb-4 pb-2 border-b border-[#B4A582] flex items-center justify-between">
             ${title}
@@ -931,31 +866,38 @@ function createFlightCard(flightData, title, delayClass, originWeather, destWeat
         </h3>
         <div class="space-y-2 text-[#595141]">
             <p class="flex items-center">
-                <span class="text-gray-500 w-14">機場：</span>
+                <span class="text-gray-500 w-14">出發地：</span>
                 <span class="text-[#595141] font-medium">
-                    ${formatAirportCode(flightData.origin.code, flightData.destination.code)}
+                    ${flightData.origin.city} (${flightData.origin.code})
                 </span>
             </p>
             <p class="flex items-center">
-                <span class="text-gray-500 w-14">時間：</span>
+                <span class="text-gray-500 w-14">目的地：</span>
                 <span class="text-[#595141] font-medium">
-                    ${flightData.origin.time} - ${flightData.destination.time}
+                    ${flightData.destination.city} (${flightData.destination.code})
                 </span>
             </p>
-            <div class="space-y-2">
-                <div class="flex items-center">
-                    <span class="text-gray-500 w-14">出發：</span>
-                    <span class="text-[#595141] font-medium">
-                        ${translateWeather(originWeather.condition)} ${originWeather.temp}°C
-                    </span>
-                </div>
-                <div class="flex items-center">
-                    <span class="text-gray-500 w-14">抵達：</span>
-                    <span class="text-[#595141] font-medium">
-                        ${translateWeather(destWeather.condition)} ${destWeather.temp}°C
-                    </span>
-                </div>
-            </div>
+            <p class="flex items-center">
+                <span class="text-gray-500 w-14">出發時間：</span>
+                <span class="text-[#595141] font-medium">
+                    ${flightData.origin.time}
+                </span>
+            </p>
+            <p class="flex items-center">
+                <span class="text-gray-500 w-14">抵達時間：</span>
+                <span class="text-[#595141] font-medium">
+                    ${flightData.destination.time}
+                </span>
+            </p>
+            <p class="flex items-center">
+                <span class="text-gray-500 w-14">航空公司：</span>
+                <span class="text-[#595141] font-medium">
+                    ${flightData.airline}
+                </span>
+            </p>
+        </div>
+        <div class="absolute top-0 right-0 mt-2 mr-2 bg-[#B4A582] text-white text-xs font-bold px-2 py-1 rounded">
+            ${flightData.flightNumber}
         </div>
     `;
     
@@ -1036,45 +978,12 @@ const AIRPORT_CODES = {
 // 修改機場代碼顯示函數
 function formatAirportCode(originCode, destinationCode) {
     try {
-        const originAirport = AIRPORT_CODES[originCode];
-        const destAirport = AIRPORT_CODES[destinationCode];
-        
-        if (!originAirport || !destAirport) {
-            return `${originCode} → ${destinationCode}`;
-        }
-        
-        return `${originAirport} → ${destAirport}`;
+        // 直接返回城市代碼
+        return `${originCode} → ${destinationCode}`;
     } catch (error) {
         console.warn('Error formatting airport codes:', error);
         return `${originCode} → ${destinationCode}`;
     }
-}
-
-// 添加天氣狀態翻譯
-const WEATHER_CONDITIONS = {
-    'Clear': '晴天',
-    'Sunny': '晴天',
-    'Partly cloudy': '局部多雲',
-    'Cloudy': '多雲',
-    'Overcast': '陰天',
-    'Mist': '薄霧',
-    'Fog': '霧',
-    'Light rain': '小雨',
-    'Moderate rain': '中雨',
-    'Heavy rain': '大雨',
-    'Thunderstorm': '雷雨',
-    'Light snow': '小雪',
-    'Moderate snow': '中雪',
-    'Heavy snow': '大雪',
-    'Rain': '雨',
-    'Snow': '雪',
-    'Drizzle': '毛毛雨',
-    'Haze': '霾'
-};
-
-// 添加天氣翻譯函數
-function translateWeather(condition) {
-    return WEATHER_CONDITIONS[condition] || condition;
 }
 
 // 檢查是否有未使用的變數或函數，這樣可以清理代碼
@@ -1085,4 +994,32 @@ function unusedFunction() {
 // 確保所有的事件監聽器都有正確的綁定和解除
 document.getElementById('myButton').addEventListener('click', function() {
     // 事件處理邏輯
-}); 
+});
+
+// 示例：使用航班 API 查询信息
+async function fetchFlightInfo(flightNumber) {
+    try {
+        const response = await fetch(`https://api.flightinfo.com/flights/${flightNumber}`);
+        if (!response.ok) {
+            throw new Error(`API 请求失败: ${response.status}`);
+        }
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('查询航班信息时出错:', error);
+        return null;
+    }
+}
+
+// 在显示航班信息时调用 API
+async function displayFlightInfo(flightData) {
+    const apiData = await fetchFlightInfo(flightData.flightNumber);
+    if (apiData) {
+        // 使用 API 数据更新航班信息
+        flightData.origin.code = apiData.origin.code;
+        flightData.destination.code = apiData.destination.code;
+        flightData.airline = apiData.airline;
+    }
+    const card = createFlightCard(flightData);
+    document.getElementById('flightContainer').appendChild(card);
+} 
