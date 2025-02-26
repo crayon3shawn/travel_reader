@@ -195,28 +195,14 @@ const flightPatterns = [
     }
 ];
 
-// 修改飯店格式解析
+// 改進後的住宿解析邏輯
 const hotelPatterns = [
-    // 表格格式 (2025/03/08 PUTRAJAYA 布特拉再也 MOXY PUTRAJAYA...)
     {
-        pattern: /(\d{4}\/\d{2}\/\d{2})\s+([A-Z\s]+)\s+(\S+)\s+([^T]+)\s+T:(\d{2,3}-\d{1,3}-\s*\d+)/g,
+        pattern: /(\d{2}\/\d{2})\s+([A-Za-z\s]+)\s*(\+\d+[\d\s-]+)/g,
         extract: (match) => ({
-            date: match[1],
-            location: match[2].trim(),
-            locationZh: match[3],
-            hotel: match[4].trim(),
-            contact: match[5].trim()
-        })
-    },
-    // 舊格式
-    {
-        pattern: /(\d{2}\/\s*\d{2})\s+(.*?)(Mercure Bangkok Makkasan|A-One Bangkok Hotel)\s*(\+\d+[\d\s-]+)/g,
-        extract: (match) => ({
-            date: formatDate(match[1].replace(/\s+/g, '')),
-            hotel: match[3].trim(),
-            contact: match[4].trim(),
-            location: 'Bangkok',
-            locationZh: '曼谷'
+            date: formatDate(match[1]),
+            hotel: match[2].trim(),
+            contact: match[3].trim()
         })
     }
 ];
@@ -240,6 +226,7 @@ async function analyzeFileContent(content) {
         
         let departureFlight = null;
         let returnFlight = null;
+        const hotels = [];
 
         // 嘗試所有航班格式
         for (const format of flightPatterns) {
@@ -255,14 +242,29 @@ async function analyzeFileContent(content) {
             }
         }
 
+        // 嘗試所有飯店格式
+        for (const format of hotelPatterns) {
+            let match;
+            while ((match = format.pattern.exec(content)) !== null) {
+                console.log('找到飯店匹配:', match);
+                hotels.push(format.extract(match));
+            }
+            if (hotels.length > 0) break;
+        }
+
         if (!departureFlight || !returnFlight) {
             console.warn('無法找到完整的航班資訊');
             return null;
         }
 
+        if (hotels.length === 0) {
+            console.warn('無法找到飯店資訊');
+        }
+
         return {
             departureFlight,
-            returnFlight
+            returnFlight,
+            accommodation: hotels
         };
 
     } catch (error) {
@@ -379,11 +381,11 @@ function getCityInfo(cityName) {
 
 // 確保在 DOM 完全加載後再綁定事件
 document.addEventListener('DOMContentLoaded', function() {
-    const button = document.getElementById('myButton');
-    if (button) {
-        button.addEventListener('click', handleClick);
+    const myButton = document.getElementById('myButton');
+    if (myButton) {
+        myButton.addEventListener('click', handleClick);
     } else {
-        console.warn('按钮元素未找到');
+        console.warn('按鈕元素未找到');
     }
 });
 
@@ -515,17 +517,23 @@ async function displayTravelInfo(data) {
                 <h2 class="text-xl font-semibold text-[#595141] mb-4">航班資訊</h2>
                 <div id="flightContainer" class="space-y-4"></div>
             </div>
+            <div class="mt-6">
+                <h2 class="text-xl font-semibold text-[#595141] mb-4">住宿資訊</h2>
+                <div id="hotelContainer" class="space-y-4"></div>
+            </div>
         `;
 
         showLoadingState();
         
         const flightContainer = document.getElementById('flightContainer');
+        const hotelContainer = document.getElementById('hotelContainer');
 
-        if (!flightContainer) {
+        if (!flightContainer || !hotelContainer) {
             throw new Error('找不到必要的容器元素');
         }
 
         flightContainer.innerHTML = '';
+        hotelContainer.innerHTML = '';
 
         // 創建並添加航班卡片
         const departureCard = createFlightCard(data.departureFlight, '出發航班');
@@ -533,6 +541,11 @@ async function displayTravelInfo(data) {
         
         flightContainer.appendChild(departureCard);
         flightContainer.appendChild(returnCard);
+
+        // 顯示住宿資訊
+        if (data.accommodation && data.accommodation.length > 0) {
+            await displayAccommodationInfo(data.accommodation);
+        }
 
         hideLoadingState();
 
@@ -758,16 +771,11 @@ function formatPhoneNumber(phone) {
     }
 }
 
-// 使用範例
+// 創建住宿資訊卡片
 function createHotelCard(hotel, index) {
-    const hotelData = hotelInfo[hotel.hotel] || {};
     const section = document.createElement('section');
     section.className = 'bg-white p-6 rounded-lg shadow fade-in';
-    
-    const mapUrl = hotelData.address ? 
-        `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotelData.address)}` : 
-        null;
-    
+
     section.innerHTML = `
         <h3 class="text-lg font-semibold text-[#595141] mb-4 pb-2 border-b border-[#B4A582] flex items-center justify-between">
             Day ${index + 1}
@@ -777,38 +785,47 @@ function createHotelCard(hotel, index) {
         </h3>
         <div class="space-y-4">
             <div class="flex items-center">
-                <span class="text-gray-500 w-14">名称：</span>
-                ${hotelData.website ? 
-                    `<a href="${hotelData.website}" target="_blank" class="text-[#595141] hover:text-[#8B7355] hover:underline flex items-center">
-                        ${hotel.hotel}
-                        <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14">
-                            </path>
-                        </svg>
-                    </a>`
-                    : hotel.hotel
-                }
+                <span class="text-gray-500 w-14">名稱：</span>
+                <span class="text-[#595141] font-medium">
+                    ${hotel.hotel}
+                </span>
             </div>
-            ${hotelData.address ? 
-                `<div class="flex items-start">
-                    <span class="text-gray-500 w-14">地址：</span>
-                    <a href="${mapUrl}" target="_blank" class="text-[#595141] hover:text-[#8B7355] hover:underline">
-                        ${hotelData.address}
-                    </a>
-                </div>`
-                : ''
-            }
+            <div class="flex items-start">
+                <span class="text-gray-500 w-14">地址：</span>
+                <span class="text-[#595141] font-medium">
+                    ${hotel.locationZh} ${hotel.location}
+                </span>
+            </div>
             <div class="flex items-center">
-                <span class="text-gray-500 w-14">电话：</span>
-                <a href="tel:${formatPhoneNumber(hotel.contact)}" class="text-[#595141] hover:text-[#8B7355]">
+                <span class="text-gray-500 w-14">電話：</span>
+                <span class="text-[#595141] font-medium">
                     ${formatPhoneNumber(hotel.contact)}
-                </a>
+                </span>
             </div>
         </div>
     `;
     
     return section;
+}
+
+// 顯示住宿資訊
+async function displayAccommodationInfo(hotels) {
+    try {
+        const hotelContainer = document.getElementById('hotelContainer');
+        if (!hotelContainer) {
+            throw new Error('找不到必要的容器元素');
+        }
+
+        hotelContainer.innerHTML = '';
+
+        hotels.forEach((hotel, index) => {
+            const card = createHotelCard(hotel, index);
+            hotelContainer.appendChild(card);
+        });
+
+    } catch (error) {
+        console.error('顯示住宿資訊時發生錯誤:', error);
+    }
 }
 
 function showLoadingState() {
@@ -981,11 +998,6 @@ function unusedFunction() {
     // 這個函數似乎沒有被使用，考慮移除
 }
 
-// 確保所有的事件監聽器都有正確的綁定和解除
-document.getElementById('myButton').addEventListener('click', function() {
-    // 事件處理邏輯
-});
-
 // 示例：使用航班 API 查询信息
 async function fetchFlightInfo(flightNumber) {
     try {
@@ -1012,4 +1024,25 @@ async function displayFlightInfo(flightData) {
     }
     const card = createFlightCard(flightData);
     document.getElementById('flightContainer').appendChild(card);
+}
+
+// 存儲住宿資訊
+async function saveAccommodationData(hotels) {
+    try {
+        localStorage.setItem('accommodationData', JSON.stringify(hotels));
+        console.log('住宿資訊已存儲');
+    } catch (error) {
+        console.error('存儲住宿資訊時出錯:', error);
+    }
+}
+
+// 讀取住宿資訊
+function getAccommodationData() {
+    try {
+        const data = localStorage.getItem('accommodationData');
+        return data ? JSON.parse(data) : null;
+    } catch (error) {
+        console.error('讀取住宿資訊時出錯:', error);
+        return null;
+    }
 } 
